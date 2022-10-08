@@ -7,7 +7,9 @@ desc : Variant of Chain of Responsibility in Python
 from _type import AbstractHandler, AbstractTask, DefaultContext
 
 
-class OrderTask(AbstractTask):
+class SetMealTask(AbstractTask):
+    """Set meal for customer"""
+
     def __init__(self, appetizer: str = None, main_course: str = None):
         self.appetizer = appetizer
         self.main_course = main_course
@@ -22,6 +24,9 @@ class OrderHandler(AbstractHandler):
     def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
         appetizer = task.appetizer if task.appetizer else "vegetable soup"
         main_course = task.main_course if task.main_course else "veal"
+        if main_course not in ["roast duck", "veal"]:
+            print(f"Main course {main_course} not in menu!")
+            context.process_flag = False
         context.set_context("order", {"appetizer": appetizer, "main_course": main_course})
 
         return context
@@ -64,13 +69,16 @@ class WaitressHandler(AbstractHandler):
 
 
 def client_code(chain: AbstractHandler):
-    print("Let's go to dinner!")
-    order_task = OrderTask(appetizer="salad", main_course="roast duck")
-    ctx = chain.handle(order_task)
-    print(f"order=({order_task})", "ctx", ctx)
+    print("Let's order a set meal!")
+    order = SetMealTask()  # default order
+    ctx = chain.handle(order)
+    print(f"order=({order})", "ctx", ctx.get_content("waitress"))
 
-    order_task = OrderTask(main_course="roast duck")
-    print(f"order=({order_task})", "ctx", chain.handle(order_task))
+    order = SetMealTask(main_course="roast duck")  # select roast duck
+    print(f"order=({order})", "ctx", chain.handle(order).get_content("waitress"))
+
+    order = SetMealTask(appetizer="salad", main_course="lamb")
+    print(f"order=({order})", "ctx", chain.handle(order).get_content("waitress"))
 
 
 if __name__ == "__main__":
