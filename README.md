@@ -29,11 +29,24 @@ In all, the authors identified 23 patterns, which they divided into 3 categories
 
 ### Creational patterns
 
+[Creational patterns](./creational/) provide useful ways to create objects. These include:
+
+- Factory Method (that creates an object whose type is determined by context).
+- Builder (used to break down the creation of complex objects into separate steps).
+- Singleton (used to ensure that only one object of a particular class can ever exist).
+
 ### Structural patterns
+
+[Structural patterns](./structural/) control the relationships between objects. These include:
+
+- Adapter allows objects with incompatible interfaces to collaborate.
+- Bridge lets you split a large class or a set of closely related classes into two separate hierarchies—abstraction and implementation—which can be developed independently of each other.
+- Composite (where an object delegates its behaviour to one or more other objects).
+- Decorator (which is used to modify the functionality of an object without changing the object itself or its interface).
 
 ### Behavioural patterns
 
-[Behavioural patterns](https://www.pythoninformer.com/programming-techniques/design-patterns/behavioural-patterns/) relate to the interactions between classes at runtime. These include:
+[Behavioural patterns](./behavioural/) relate to the interactions between classes at runtime. These include:
 
 - Observer (which allows objects to notified other object when their state changes).
 - Strategy that allows alternate algorithms to be selected.
