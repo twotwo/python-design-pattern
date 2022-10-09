@@ -10,8 +10,34 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)-15s - %(name)s:%(lineno)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)-15s - %(levelname)-8s - %(name)s:%(lineno)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+class HandlerError(Exception):
+    """Raised when an operation attempts a state transition that's not allowed.
+
+    Attributes:
+        context -- context in chain
+        current -- current handler
+        next -- next handler in chain
+        expression -- expression in which the error occurred
+    """
+
+    def __init__(
+        self,
+        context: DefaultContext,
+        current: str,
+        next: str,
+        expression: Exception,
+    ):
+        self.context = context
+        self.current = current
+        self.next = next
+        self.expression = expression
+
+    def __str__(self) -> str:
+        return f"HandlerError(current=[{self.current}], next=[{self.next}])"
 
 
 class DefaultContext:
@@ -19,7 +45,6 @@ class DefaultContext:
 
     def __init__(self, task: AbstractTask) -> None:
         self.task = task
-        self.process_flag: bool = True
         self._context: Any = {}
 
     def set_context(self, key: str, value):
@@ -54,18 +79,23 @@ class AbstractHandler(ABC):
 
     def handle(self, task: AbstractTask, context=None) -> DefaultContext:
         """The default handle mothod, logging before and after handle process"""
-        logger.info(f"enter {self.__class__}")
+        current = self.__class__.__name__  # current handler class name
+        next_ = self._next_handler.__class__.__name__ if hasattr(self, "_next_handler") else None
+
         if context is None:
             context = DefaultContext(task=task)
             logger.debug("create context")
 
-        logger.info(f"do predict at {self.__class__.__name__}")
-        ctx = self.do_predict(task, context)
+        try:
+            ctx = self.do_predict(task, context)
+        except Exception as ex:
+            logger.error(f"do predict failed at {self.__class__.__name__}: {ex}")
+            raise HandlerError(context=context, current=current, next=next_, expression=ex)  # type: ignore
 
-        if ctx.process_flag and hasattr(self, "_next_handler"):  # 继续下一个 Handler
+        if hasattr(self, "_next_handler"):  # 继续下一个 Handler
             return self._next_handler.handle(task, ctx)
 
-        logger.info(f"finish chain at {self.__class__.__name__}")
+        logger.debug(f"finish chain at {self.__class__.__name__}")
         return ctx
 
     @abstractmethod

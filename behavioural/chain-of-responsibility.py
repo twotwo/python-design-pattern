@@ -4,7 +4,11 @@ since: 2022/10/07
 desc : Variant of Chain of Responsibility in Python
 """
 
-from _type import AbstractHandler, AbstractTask, DefaultContext
+import logging
+
+from _type import AbstractHandler, AbstractTask, DefaultContext, HandlerError
+
+logger = logging.getLogger(__name__)
 
 
 class SetMealTask(AbstractTask):
@@ -23,10 +27,9 @@ class OrderHandler(AbstractHandler):
 
     def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
         appetizer = task.appetizer if task.appetizer else "vegetable soup"
-        main_course = task.main_course if task.main_course else "veal"
+        main_course = task.main_course if task.main_course else "roast duck"
         if main_course not in ["roast duck", "veal"]:
-            print(f"Main course {main_course} not in menu!")
-            context.process_flag = False
+            raise RuntimeError(f"Main course [{main_course}] not in menu!")
         context.set_context("order", {"appetizer": appetizer, "main_course": main_course})
 
         return context
@@ -35,19 +38,32 @@ class OrderHandler(AbstractHandler):
 class CookHandler(AbstractHandler):
     """Do cook work in handler"""
 
+    # Inventory for cook recipe
+    INGREDIENTS = {
+        "roast duck": True,
+        "veal": False,
+    }
+
     def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
         order = context.get_content("order")
         if order is None:
-            context.process_flag = False
-            return context
+            raise RuntimeError("order not in context!")
+        main_course = order["main_course"]
+        if not self._check_inventory(main_course):
+            raise RuntimeError(f"Main course [{main_course}] can't be cooked!")
         cook = {}
         if "appetizer" in order:
             cook["appetizer"] = order["appetizer"]
         if "main_course" in order:
-            cook["main_course"] = order["main_course"]
+            cook["main_course"] = main_course
         context.set_context("cook", cook)
 
         return context
+
+    def _check_inventory(self, course):
+        if course not in CookHandler.INGREDIENTS:
+            return False
+        return CookHandler.INGREDIENTS[course]
 
 
 class WaitressHandler(AbstractHandler):
@@ -56,8 +72,7 @@ class WaitressHandler(AbstractHandler):
     def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
         cook = context.get_content("cook")
         if cook is None:
-            context.process_flag = False
-            return context
+            raise RuntimeError("cook not in context!")
         waitress = {}
         if "appetizer" in cook:
             waitress["appetizer"] = cook["appetizer"]
@@ -69,24 +84,28 @@ class WaitressHandler(AbstractHandler):
 
 
 def client_code(chain: AbstractHandler):
-    print("Let's order a set meal!")
-    order = SetMealTask()  # default order
-    ctx = chain.handle(order)
-    print(f"order=({order})", "ctx", ctx.get_content("waitress"))
+    logger.info("Let's order a set meal!")
 
-    order = SetMealTask(main_course="roast duck")  # select roast duck
-    print(f"order=({order})", "ctx", chain.handle(order).get_content("waitress"))
-
-    order = SetMealTask(appetizer="salad", main_course="lamb")
-    print(f"order=({order})", "ctx", chain.handle(order).get_content("waitress"))
+    for order in [
+        SetMealTask(),  # default order
+        SetMealTask(main_course="lamb"),  # select veal but not in set meal
+        SetMealTask(appetizer="salad", main_course="veal"),  # select veal but can't cook
+    ]:
+        try:
+            ctx = chain.handle(order)
+        except HandlerError as ex:
+            logger.info(f"order=({order}), error={ex}, ctx={ex.context}, stack={ex.expression}")
+        else:
+            logger.info(f"order=({order}), serve={ctx.get_content('waitress')}")
 
 
 if __name__ == "__main__":
-    print("Set up the kitchen in chain!")
     order_handler = OrderHandler()
     cook_handler = CookHandler()
     waitress_handler = WaitressHandler()
 
     order_handler.set_next(cook_handler).set_next(waitress_handler)
+
+    logger.info("Set up the kitchen in chain!")
 
     client_code(order_handler)
