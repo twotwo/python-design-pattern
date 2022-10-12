@@ -23,4 +23,9 @@ repos:
         entry: poetry run flake8
         language: python
         types: [python]
-        
+      - id: mypy
+        name: mypy
+        entry: poetry run mypy behavioural
+        language: python
+        types: [python]
+        pass_filenames: false

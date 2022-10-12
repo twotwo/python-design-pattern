@@ -4,6 +4,8 @@ since: 2022/10/07
 desc : Variant of Chain of Responsibility in Python
 """
 
+from __future__ import annotations
+
 import logging
 
 from _type import AbstractHandler, AbstractTask, DefaultContext, HandlerError
@@ -14,23 +16,28 @@ logger = logging.getLogger(__name__)
 class SetMealTask(AbstractTask):
     """Set meal for customer"""
 
-    def __init__(self, appetizer: str = None, main_course: str = None):
+    def __init__(self, appetizer: str = "vegetable soup", main_course: str = "roast duck"):
         self.appetizer = appetizer
         self.main_course = main_course
 
     def __repr__(self) -> str:
         return f"appetizer: {self.appetizer}, main_course: {self.main_course}"
 
+    @staticmethod
+    def from_abstract_task(task: AbstractTask) -> SetMealTask:
+        if isinstance(task, SetMealTask):
+            return task
+        raise RuntimeError(f"Can't cast to SetMealTask: {task}")
+
 
 class OrderHandler(AbstractHandler):
     """Do order work in handler"""
 
     def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
-        appetizer = task.appetizer if task.appetizer else "vegetable soup"
-        main_course = task.main_course if task.main_course else "roast duck"
-        if main_course not in ["roast duck", "veal"]:
-            raise RuntimeError(f"Main course [{main_course}] not in menu!")
-        context.set_context("order", {"appetizer": appetizer, "main_course": main_course})
+        task = SetMealTask.from_abstract_task(task)
+        if task.main_course not in ["roast duck", "veal"]:
+            raise RuntimeError(f"Main course [{task.main_course}] not in menu!")
+        context.set_context("order", {"appetizer": task.appetizer, "main_course": task.main_course})
 
         return context
 
@@ -88,7 +95,7 @@ def client_code(chain: AbstractHandler):
 
     for order in [
         SetMealTask(),  # default order
-        SetMealTask(main_course="lamb"),  # select veal but not in set meal
+        SetMealTask(main_course="lamb"),  # select lamb but not in set meal
         SetMealTask(appetizer="salad", main_course="veal"),  # select veal but can't cook
     ]:
         try:
@@ -100,12 +107,12 @@ def client_code(chain: AbstractHandler):
 
 
 if __name__ == "__main__":
-    order_handler = OrderHandler()
-    cook_handler = CookHandler()
-    waitress_handler = WaitressHandler()
+    order_handler = OrderHandler()  # ordering process
+    cook_handler = CookHandler()  # cooking process
+    waitress_handler = WaitressHandler()  # serving process
 
     order_handler.set_next(cook_handler).set_next(waitress_handler)
 
-    logger.info("Set up the kitchen in chain!")
+    logger.info("Set up the restaurant process in chain!")
 
     client_code(order_handler)

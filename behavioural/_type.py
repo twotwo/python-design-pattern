@@ -78,7 +78,19 @@ class AbstractHandler(ABC):
         return handler
 
     def handle(self, task: AbstractTask, context=None) -> DefaultContext:
-        """The default handle mothod, logging before and after handle process"""
+        """
+        The default handle mothod, logging before and after handle process.
+
+        Args:
+            task: An immutable task object.
+            context
+
+        Returns:
+            DefaultContext: all handler's context.
+
+        Raises:
+            HandlerError: if run do_predict failed in handler.
+        """
         current = self.__class__.__name__  # current handler class name
         next_ = self._next_handler.__class__.__name__ if hasattr(self, "_next_handler") else None
 
