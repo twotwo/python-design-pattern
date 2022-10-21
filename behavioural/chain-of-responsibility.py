@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import logging
 
-from _type import AbstractHandler, AbstractTask, DefaultContext, HandlerError
+from _type import AbstractHandler, DefaultContext, HandlerError
 
 logger = logging.getLogger(__name__)
 
 
-class SetMealTask(AbstractTask):
-    """Set meal for customer"""
+class SetMealOrder:
+    """Customer place an order of set meal"""
 
     def __init__(self, appetizer: str = "vegetable soup", main_course: str = "roast duck"):
         self.appetizer = appetizer
@@ -23,26 +23,47 @@ class SetMealTask(AbstractTask):
     def __repr__(self) -> str:
         return f"appetizer: {self.appetizer}, main_course: {self.main_course}"
 
+
+class DemoContext(DefaultContext):
+    """Context for this demo chain's handler"""
+
+    def __init__(self, order: SetMealOrder) -> None:
+        self.order = order
+        self.status = "init"
+
+    def __repr__(self) -> str:
+        return f"DemoContext(order={self.order}, status={self.status})"
+
     @staticmethod
-    def from_abstract_task(task: AbstractTask) -> SetMealTask:
-        if isinstance(task, SetMealTask):
-            return task
-        raise RuntimeError(f"Can't cast to SetMealTask: {task}")
+    def from_abstract_context(context: DefaultContext) -> DemoContext:
+        if isinstance(context, DemoContext):
+            return context
+        raise RuntimeError(f"Can't cast to DemoContext: {context}")
 
 
-class OrderHandler(AbstractHandler):
+class DemoHandler(AbstractHandler):
     """Do order work in handler"""
 
-    def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
-        task = SetMealTask.from_abstract_task(task)
-        if task.main_course not in ["roast duck", "veal"]:
-            raise RuntimeError(f"Main course [{task.main_course}] not in menu!")
-        context.set_context("order", {"appetizer": task.appetizer, "main_course": task.main_course})
+    def do_predict(self, context: DefaultContext) -> DefaultContext:
+        ctx = DemoContext.from_abstract_context(context)
+        return self._predict(ctx)
 
-        return context
+    def _predict(self, context: DemoContext) -> DemoContext:
+        raise RuntimeError("Not implement yet")
 
 
-class CookHandler(AbstractHandler):
+class OrderHandler(DemoHandler):
+    """Do order work in handler"""
+
+    def _predict(self, ctx: DemoContext) -> DemoContext:
+        if ctx.order.main_course not in ["roast duck", "veal"]:  # verify order
+            raise RuntimeError(f"Main course [{ctx.order.main_course}] not in menu!")
+
+        ctx.status = "orderd"
+        return ctx
+
+
+class CookHandler(DemoHandler):
     """Do cook work in handler"""
 
     # Inventory for cook recipe
@@ -51,21 +72,16 @@ class CookHandler(AbstractHandler):
         "veal": False,
     }
 
-    def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
-        order = context.get_content("order")
+    def _predict(self, ctx: DemoContext) -> DemoContext:
+        order = ctx.order
         if order is None:
             raise RuntimeError("order not in context!")
-        main_course = order["main_course"]
-        if not self._check_inventory(main_course):
-            raise RuntimeError(f"Main course [{main_course}] can't be cooked!")
-        cook = {}
-        if "appetizer" in order:
-            cook["appetizer"] = order["appetizer"]
-        if "main_course" in order:
-            cook["main_course"] = main_course
-        context.set_context("cook", cook)
+        if not self._check_inventory(order.main_course):
+            raise RuntimeError(f"Main course [{order.main_course}] can't be cooked!")
+        logger.info("cooking ...")
+        ctx.status = "cooked"
 
-        return context
+        return ctx
 
     def _check_inventory(self, course):
         if course not in CookHandler.INGREDIENTS:
@@ -73,37 +89,33 @@ class CookHandler(AbstractHandler):
         return CookHandler.INGREDIENTS[course]
 
 
-class WaitressHandler(AbstractHandler):
+class WaitressHandler(DemoHandler):
     """Serve food in handler"""
 
-    def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
-        cook = context.get_content("cook")
-        if cook is None:
-            raise RuntimeError("cook not in context!")
-        waitress = {}
-        if "appetizer" in cook:
-            waitress["appetizer"] = cook["appetizer"]
-        if "main_course" in cook:
-            waitress["main_course"] = cook["main_course"]
-        context.set_context("waitress", waitress)
+    def _predict(self, ctx: DemoContext) -> DemoContext:
+        if ctx.status != "cooked":
+            raise RuntimeError("cook not done!")
+        logger.info("serving ...")
+        ctx.status = "serving"
 
-        return context
+        return ctx
 
 
 def client_code(chain: AbstractHandler):
     logger.info("Let's order a set meal!")
 
     for order in [
-        SetMealTask(),  # default order
-        SetMealTask(main_course="lamb"),  # select lamb but not in set meal
-        SetMealTask(appetizer="salad", main_course="veal"),  # select veal but can't cook
+        SetMealOrder(),  # default order
+        SetMealOrder(main_course="lamb"),  # select lamb but not in set meal
+        SetMealOrder(appetizer="salad", main_course="veal"),  # select veal but can't cook
     ]:
+        ctx = DemoContext(order)
         try:
-            ctx = chain.handle(order)
+            ctx = DemoContext.from_abstract_context(chain.handle(ctx))
         except HandlerError as ex:
             logger.info(f"order=({order}), error={ex}, ctx={ex.context}, stack={ex.expression}")
         else:
-            logger.info(f"order=({order}), serve={ctx.get_content('waitress')}")
+            logger.info(f"order=({order}), status={ctx.status}")
 
 
 if __name__ == "__main__":

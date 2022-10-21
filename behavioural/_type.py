@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)-15s - %(levelname)-8s - %(name)s:%(lineno)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,23 +42,6 @@ class HandlerError(Exception):
 class DefaultContext:
     """The default chaining context storage"""
 
-    def __init__(self, task: AbstractTask) -> None:
-        self.task = task
-        self._context: Any = {}
-
-    def set_context(self, key: str, value):
-        self._context[key] = value
-
-    def get_content(self, key: str):
-        if key in self._context:
-            return self._context[key]
-        return None
-
-    def __repr__(self) -> str:
-        return str(self._context)
-
-
-class AbstractTask(ABC):
     pass
 
 
@@ -77,13 +59,12 @@ class AbstractHandler(ABC):
         # handler1.set_next(handler2).set_next(handler3)
         return handler
 
-    def handle(self, task: AbstractTask, context=None) -> DefaultContext:
+    def handle(self, context: DefaultContext) -> DefaultContext:
         """
         The default handle mothod, logging before and after handle process.
 
         Args:
-            task: An immutable task object.
-            context
+            context: Context for handle process.
 
         Returns:
             DefaultContext: all handler's context.
@@ -95,21 +76,21 @@ class AbstractHandler(ABC):
         next_ = self._next_handler.__class__.__name__ if hasattr(self, "_next_handler") else None
 
         if context is None:
-            context = DefaultContext(task=task)
-            logger.debug("create context")
+            logger.error("no context to handle")
+            raise HandlerError(context=context, current=current, next=next_, expression=None)  # type: ignore
 
         try:
-            ctx = self.do_predict(task, context)
+            ctx = self.do_predict(context)
         except Exception as ex:
             logger.error(f"do predict failed at {self.__class__.__name__}: {ex}")
             raise HandlerError(context=context, current=current, next=next_, expression=ex)  # type: ignore
 
         if hasattr(self, "_next_handler"):  # 继续下一个 Handler
-            return self._next_handler.handle(task, ctx)
+            return self._next_handler.handle(ctx)
 
         logger.debug(f"finish chain at {self.__class__.__name__}")
         return ctx
 
     @abstractmethod
-    def do_predict(self, task: AbstractTask, context: DefaultContext) -> DefaultContext:
+    def do_predict(self, context: DefaultContext) -> DefaultContext:
         pass
